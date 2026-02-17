@@ -2,36 +2,47 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
+import datetime
+
+# --- NEW: IP LOGGING FUNCTION ---
+def log_user_activity():
+    # Attempt to get IP from headers (works on Hugging Face/Cloud)
+    # Most cloud providers use 'X-Forwarded-For'
+    headers = st.context.headers
+    user_ip = headers.get("X-Forwarded-For", "Unknown IP").split(',')[0]
+    
+    # Log to the Hugging Face Console (you'll see this in the "Logs" tab)
+    if "logged_visit" not in st.session_state:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] ACCESS LOG: User IP {user_ip} connected.")
+        st.session_state["logged_visit"] = True
+    return user_ip
 
 # --- 1. PASSWORD PROTECTION SYSTEM ---
 def check_password():
-    """Returns True if the user had the correct password."""
     def password_entered():
-        # This looks for the secret you set in Hugging Face Settings
         if st.session_state["password"] == os.getenv("APP_PASSWORD", "admin123"):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            del st.session_state["password"] 
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        # First run, show input for password.
         st.text_input("Enter Password to Access AI", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        # Password not correct, show input + error.
         st.text_input("Enter Password to Access AI", type="password", on_change=password_entered, key="password")
         st.error("😕 Password incorrect")
         return False
     else:
-        # Password correct.
         return True
 
 # --- 2. THE APP GATE ---
 if check_password():
-    # --- ALL YOUR ORIGINAL CODE STARTS HERE ---
+    # Run the logging
+    current_user_ip = log_user_activity()
     
-    # --- THE BRAIN: 2026 TOP TEAM STATS ---
+    # --- ALL YOUR ORIGINAL CODE STARTS HERE ---
     TEAM_INTEL = {
         "LSU Tigers": {"era": 3.4, "offense": 1.4},      
         "Oregon St Beavers": {"era": 3.6, "offense": 1.3},
@@ -49,12 +60,10 @@ if check_password():
         projection = ((h['era'] + a['era']) / 8.8) * ((h['offense'] + a['offense']) / 2) * 11.8
         return round(max(7.5, min(projection, 19.5)), 1)
 
-    # --- THE INTERFACE ---
     st.set_page_config(layout="wide", page_title="NCAA Diamond AI")
     st.title("⚾ Pro-Grade NCAA Over/Under AI")
-    st.markdown("### Strategy: *Aggressive Value Detection (0.6 Run Edge)*")
+    st.sidebar.write(f"Logged in as: {current_user_ip}") # Displays their IP in the sidebar
 
-    # Logout button in the sidebar
     if st.sidebar.button("🔒 Logout"):
         st.session_state["password_correct"] = False
         st.rerun()
@@ -78,12 +87,9 @@ if check_password():
                 ai_val = get_pro_prediction(home, away)
                 edge = round(ai_val - vegas, 1)
                 
-                if edge >= 0.6: 
-                    action = "🔥 BET OVER"
-                elif edge <= -0.6: 
-                    action = "❄️ BET UNDER"
-                else: 
-                    action = "PASS"
+                if edge >= 0.6: action = "🔥 BET OVER"
+                elif edge <= -0.6: action = "❄️ BET UNDER"
+                else: action = "PASS"
                 
                 results.append({
                     "Matchup": f"{away} @ {home}",
@@ -95,4 +101,4 @@ if check_password():
             
             df = pd.DataFrame(results)
             st.table(df)
-            st.success("Analysis Complete! Higher 'Edge' numbers mean more confidence.")
+            st.success("Analysis Complete!")
